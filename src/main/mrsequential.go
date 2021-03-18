@@ -6,13 +6,16 @@ package main
 // go run mrsequential.go wc.so pg*.txt
 //
 
-import "fmt"
-import "../mr"
-import "plugin"
-import "os"
-import "log"
-import "io/ioutil"
-import "sort"
+import (
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"plugin"
+	"sort"
+
+	"../mr"
+)
 
 // for sorting by key.
 type ByKey []mr.KeyValue
@@ -29,7 +32,6 @@ func main() {
 	}
 
 	mapf, reducef := loadPlugin(os.Args[1])
-
 	//
 	// read each input file,
 	// pass it to Map,

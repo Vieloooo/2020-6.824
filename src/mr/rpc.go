@@ -6,8 +6,10 @@ package mr
 // remember to capitalize all names.
 //
 
-import "os"
-import "strconv"
+import (
+	"os"
+	"strconv"
+)
 
 //
 // example to show how to declare the arguments
@@ -24,6 +26,22 @@ type ExampleReply struct {
 
 // Add your RPC definitions here.
 
+type query int
+
+type taskList []string
+
+func (q *query) mapAskWork(args *taskList) error {
+
+	return nil
+}
+func (q *query) IfMerge(filename *string, ifmg *bool) error {
+	if tState[*filename] == done {
+		*ifmg = false
+		return nil
+	}
+	*ifmg = true
+	return nil
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.

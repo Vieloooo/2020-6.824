@@ -1,16 +1,36 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
-
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+)
 
 type Master struct {
 	// Your definitions here.
-
 }
+
+// state structure
+type taskState map[string]int
+
+var tState taskState
+
+const (
+	notAssigned = iota
+	processing
+	timeout
+	Done
+)
+
+type workerState int
+
+const (
+	availiable = iota
+	working
+	down
+	tooSlow
+)
 
 // Your code here -- RPC handlers for the worker to call.
 
@@ -19,22 +39,17 @@ type Master struct {
 //
 // the RPC argument and reply types are defined in rpc.go.
 //
-func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
 
-
-//
-// start a thread that listens for RPCs from worker.go
-//
 func (m *Master) server() {
 	rpc.Register(m)
+	//register rpcs
+	var Q query = 1
+	rpc.Register(Q)
 	rpc.HandleHTTP()
-	//l, e := net.Listen("tcp", ":1234")
-	sockname := masterSock()
-	os.Remove(sockname)
-	l, e := net.Listen("unix", sockname)
+	l, e := net.Listen("tcp", ":1234")
+	//sockname := masterSock()
+	//os.Remove(sockname)
+	//l, e := net.Listen("unix", sockname)
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
@@ -46,10 +61,10 @@ func (m *Master) server() {
 // if the entire job has finished.
 //
 func (m *Master) Done() bool {
+
 	ret := false
 
 	// Your code here.
-
 
 	return ret
 }
@@ -61,10 +76,16 @@ func (m *Master) Done() bool {
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
-
 	// Your code here.
-
-
+	// instial task (files) state
+	initFileState(files)
+	//
 	m.server()
 	return &m
+}
+
+func initFileState(files []string) {
+	for _, ff := range files {
+		tState[ff] = notAssigned
+	}
 }
