@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"sync"
+	"time"
 )
 
 type Master struct {
@@ -12,24 +14,18 @@ type Master struct {
 }
 
 // state structure
-type taskState map[string]int
+type taskState struct {
+	state    map[string]int
+	costTime time.Duration
+	lk       sync.Mutex
+}
 
-var tState taskState
+var tState = new(taskState)
 
 const (
 	notAssigned = iota
 	processing
-	timeout
 	Done
-)
-
-type workerState int
-
-const (
-	availiable = iota
-	working
-	down
-	tooSlow
 )
 
 // Your code here -- RPC handlers for the worker to call.
@@ -40,10 +36,12 @@ const (
 // the RPC argument and reply types are defined in rpc.go.
 //
 
+type Query int
+
 func (m *Master) server() {
 	rpc.Register(m)
 	//register rpcs
-	var Q query = 1
+	Q := new(Query)
 	rpc.Register(Q)
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp", ":1234")
@@ -79,13 +77,46 @@ func MakeMaster(files []string, nReduce int) *Master {
 	// Your code here.
 	// instial task (files) state
 	initFileState(files)
-	//
+	//launch timeout checker
+	//if task is working counting time
+
 	m.server()
 	return &m
 }
 
 func initFileState(files []string) {
+	tState.lk.Lock()
+	defer tState.lk.Unlock()
 	for _, ff := range files {
-		tState[ff] = notAssigned
+		tState.state[ff] = notAssigned
 	}
 }
+
+func (Q *Query) assignMapper(args *argsAskTask, reply *replyAskTask) error {
+	args.file= "hahaha"
+	tState.lk.Lock()
+	defer tState.lk.Unlock()
+	for file, _ := range tState.state {
+		reply.tasklist = append(reply.tasklist,file)
+		tState.state[file] = processing
+	}
+	t := time.NewTimer(time.Second*10)
+	//reassign the timeout work
+	go  func(){
+		<-t.C
+		tState.lk.Lock()
+		defer tState.lk.Unlock()
+		for f,s := range tState.state{
+			if s == processing{
+				ReAssign(f)
+			}
+		}
+	}()
+	return nil
+}
+
+func ReAssign(filename string){
+	args:=
+	call("Wrpc.HandleReassign",   ,)
+}
+
