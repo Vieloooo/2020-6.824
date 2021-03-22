@@ -13,36 +13,26 @@ import (
 
 //
 // example to show how to declare the arguments
-// and reply for an RPC.
+// and Reply for an RPC.
 //
 
-type ExampleArgs struct {
-	X int
-}
-
-type ExampleReply struct {
-	Y int
-}
 
 // Add your RPC definitions here.
 
-//args for ask for tasks
-type argsAskTask struct {
-	file string
-}
-type replyAskTask struct {
-	tasklist []string
-}
+//ARgs for ask for tasks
 
-//if merge struct
-type argsIfMerge struct {
-	filename string
+type FileName struct {
+	name string
 }
-type replyIfMerge struct {
-	confirm bool
+type Tasklist struct {
+	list []string
 }
-
-
+type Confirm struct{
+	yes bool
+}
+type NReducer struct{
+	nr int
+}
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.
 // Can't use the current directory since

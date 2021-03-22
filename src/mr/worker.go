@@ -10,7 +10,19 @@ import (
 	"net/rpc"
 	"os"
 	"sync"
+	"sort"
+	"strconv"
 )
+
+//
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
 
 //
 // Map functions return a slice of KeyValue.
@@ -31,15 +43,16 @@ var RF *func(string, []string) string
 type Wrpc struct{
 
 }
-
+//reducer input
+type Kvset map[string][]string
+var Rinput []Kvset
 //handle reassign
-func (wr *Wrpc)HandleReassign(args *argsAskTask,ok *replyIfMerge){
-	go Amapper((*MF),args.file)
-	ok.confirm = true
-
+func (wr *Wrpc)HandleReassign(ARgs *FileName,Reply *Confirm)error{
+	go Amapper(*MF,ARgs.name)
+	Reply.yes = true
+	return nil
 }
-var gbkv GlobalKV = GlobalKV{}
-
+ var gbkv  = GlobalKV{}
 //
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -62,10 +75,11 @@ func Worker(mapf func(string, string) []KeyValue,
 	wr := Wrpc{}
 	go wr.Server()
 	//ask master for task
-	argsMapper := argsAskTask{}
-	replymapper := replyAskTask{}
-	call("Query.assignMapper", &argsMapper, &replymapper)
-	for _, task := range replymapper.tasklist {
+	args:= Confirm{}
+	args.yes = true
+	reply := Tasklist{}
+	call("Query.AssignMapper",&args,&reply)
+	for _, task := range reply.list {
 		go Amapper(mapf, task)
 	}
 	//go run multi mapper
@@ -73,35 +87,14 @@ func Worker(mapf func(string, string) []KeyValue,
 	//update
 }
 
-//
-// example function to show how to make an RPC call to the master.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
 
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	call("Master.Example", &args, &reply)
-
-	// reply.Y should be 100.
-	fmt.Printf("reply.Y %v\n", reply.Y)
-}
 
 //
 // send an RPC request to the master, wait for the response.
 // usually returns true.
 // returns false if something goes wrong.
 //
-func call(rpcname string, args interface{}, reply interface{}) bool {
+func call(rpcname string, ARgs interface{}, Reply interface{}) bool {
 	c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
 	//sockname := masterSock()
 	//c, err := rpc.DialHTTP("unix", sockname)
@@ -110,7 +103,7 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	}
 	defer c.Close()
 
-	err = c.Call(rpcname, args, reply)
+	err = c.Call(rpcname, ARgs, Reply)
 	if err == nil {
 		return true
 	}
@@ -133,21 +126,34 @@ func Amapper(mapf func(string, string) []KeyValue, filename string)  {
 	// append all emit to local kv set
 	middlekv := mapf(filename, string(content))
 	// after finishing map, ask master if it is allowed to merge to global kv
-	IfmergeArgs := argsIfMerge{}
-	IfmergeArgs.filename = filename
-	IfmergeReply := replyIfMerge{}
-	IfmergeReply.confirm = false
-	call("Query.IfMerge", &IfmergeArgs, &IfmergeReply)
-	if IfmergeReply.confirm {
+	IfmergeARgs := FileName{}
+	IfmergeARgs.name = filename
+	IfmergeReply := Confirm{}
+	IfmergeReply.yes = false
+	call("Query.IfMerge", &IfmergeARgs, &IfmergeReply)
+	//if task have not done, merge it to gbkv
+	if IfmergeReply.yes {
 		gbkv.mu.Lock()
 		gbkv.gkv = append(gbkv.gkv, middlekv...)
 		gbkv.mu.Unlock()
+		call("Query.TaskDone",&IfmergeARgs,&IfmergeReply)
+	}
+	return
+}
+ // main func for reducer
+ func Areducer (index int){
+	for k,v := range Rinput[index]{
+		output := (*RF)(k, v)
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile[index], "%v %v\n", k, output)
 
 	}
-	//return
-}
+ }
 func (wr *Wrpc)Server(){
-	rpc.Register(wr)
+	err:= rpc.Register(wr)
+	if err != nil{
+		panic("worker rpc down ")
+	}
 	//register rpcs
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp", ":1235")
@@ -158,4 +164,49 @@ func (wr *Wrpc)Server(){
 		log.Fatal("listen error:", e)
 	}
 	go http.Serve(l,nil)
+}
+ var ofile  [] *os.File
+func (wr *Wrpc)RunReducer(ARgs *NReducer,Reply *Confirm)error {
+	//divide gbkv
+	nreduce := ARgs.nr
+	Reply.yes = true
+	gbkv.mu.Lock()
+	defer gbkv.mu.Unlock()
+	sort.Sort(ByKey(gbkv.gkv))
+	//init
+
+	Rinput = make([]Kvset,nreduce)
+	for i:=0 ; i<nreduce ; i++{
+		Rinput[i]= make(Kvset)
+	}
+	// run nr reducer
+	// assign reducer to work
+	//new nr output files
+	onamePrefix := "mr-out-"
+	ofile = [] *os.File{}
+	for i:=0;i<nreduce;i++{
+		f, _ := os.Create(onamePrefix + strconv.Itoa(i))
+		ofile = append(ofile,f)
+	}
+	//process raw kv
+	i := 0
+	for i < len(gbkv.gkv) {
+		j := i + 1
+		for j < len(gbkv.gkv) && gbkv.gkv[j].Key == gbkv.gkv[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, gbkv.gkv[k].Value)
+		}
+		//use ihash to distribute kvs
+		index:= ihash(gbkv.gkv[i].Key)
+		Rinput[index][gbkv.gkv[i].Key] = values
+		i = j
+	}
+	// run nreduce mapper
+	for i:=0; i<nreduce; i++{
+		go Areducer(i)
+	}
+	return nil
 }
