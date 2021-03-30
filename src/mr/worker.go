@@ -72,8 +72,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	MF = &mapf
 	RF = &reducef
 	// launch a rpc server to recieve master msg
-	wr := Wrpc{}
-	go wr.Server()
+	go WServer()
 	//ask master for task
 	args:= Confirm{}
 	args.yes = true
@@ -86,8 +85,6 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	//update
 }
-
-
 
 //
 // send an RPC request to the master, wait for the response.
@@ -149,28 +146,15 @@ func Amapper(mapf func(string, string) []KeyValue, filename string)  {
 
 	}
  }
-func (wr *Wrpc)Server(){
-	err:= rpc.Register(wr)
-	if err != nil{
-		panic("worker rpc down ")
-	}
-	//register rpcs
-	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", ":1235")
-	//sockname := masterSock()
-	//os.Remove(sockname)
-	//l, e := net.Listen("unix", sockname)
-	if e != nil {
-		log.Fatal("listen error:", e)
-	}
-	go http.Serve(l,nil)
-}
+
  var ofile  [] *os.File
 func (wr *Wrpc)RunReducer(ARgs *NReducer,Reply *Confirm)error {
 	//divide gbkv
 	nreduce := ARgs.nr
 	Reply.yes = true
 	gbkv.mu.Lock()
+	//
+	fmt.Println(gbkv.gkv)
 	defer gbkv.mu.Unlock()
 	sort.Sort(ByKey(gbkv.gkv))
 	//init
@@ -209,4 +193,18 @@ func (wr *Wrpc)RunReducer(ARgs *NReducer,Reply *Confirm)error {
 		go Areducer(i)
 	}
 	return nil
+}
+ func WServer(){
+	wr := Wrpc{}
+	err:= rpc.Register(wr)
+	if err != nil{
+		panic("worker rpc down ")
+	}
+	//register rpcs
+	rpc.HandleHTTP()
+	l, e := net.Listen("tcp", ":1235")
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	go http.Serve(l,nil)
 }

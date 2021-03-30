@@ -52,7 +52,7 @@ func (Q *Query)IfMerge(ARgs *FileName,Reply *Confirm)error{
 	return nil
 }
 func (m *Master) server() {
-	rpc.Register(m)
+	//rpc.Register(m)
 	//register rpcs
 	Q := new(Query)
 	rpc.Register(Q)
@@ -79,8 +79,6 @@ func (m *Master) Done() bool {
 
 	return ret
 }
-
-//
 // create a Master.
 // main/mrmaster.go calls this function.
 // nReduce is the number of reduce tasks to use.
