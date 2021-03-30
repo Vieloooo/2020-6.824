@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"plugin"
 	"sort"
 
 	"../mr"
@@ -92,6 +91,7 @@ func main() {
 // load the application Map and Reduce functions
 // from a plugin file, e.g. ../mrapps/wc.so
 //
+/*
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {
@@ -110,3 +110,6 @@ func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(strin
 
 	return mapf, reducef
 }
+
+
+ */
