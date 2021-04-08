@@ -1,10 +1,14 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-
+import (
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+	"sort"
+)
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,17 +28,46 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
+//
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
-	// Your worker implementation here.
-
-	// uncomment to send the Example RPC to the master.
-	// CallExample()
+	//ask task
+	for {
+		args := ExampleArgs{}
+		//ask if done
+		over := DoneReply{}
+		over.yes = false
+		call("Master.AskTask", &args, &over)
+		if over.yes {
+			fmt.Printf("work down \n")
+			return
+		}
+		//not over ask task
+		reply := task{}
+		call("Master.AskTask", &args, &reply)
+		if reply.target != "Please wait" {
+			if reply.T == MAP {
+				file := reply.target
+				//do map
+				DoMap(file, mapf)
+			} else {
+				//innerkv := reply.target
+				//do reudce
+			}
+		}
+	}
 
 }
 
@@ -82,4 +115,26 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 
 	fmt.Println(err)
 	return false
+}
+func DoMap(filename string, mapf func(string, string) []KeyValue) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kva := mapf(filename, string(content))
+
+	//divide kva into mr-filename-(0~9)
+	sort.Sort(ByKey(kva))
+	//divide kva to temp json file
+
+	//ask for submit
+	//call("Master.AskSubmit",)
+}
+func DoReduce(file string, reducef func(string, []string) string) {
+
 }
