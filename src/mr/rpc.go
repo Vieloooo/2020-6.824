@@ -31,6 +31,9 @@ type DoneReply struct {
 type SubmitArgs struct {
 	file string
 }
+type NreduceReply struct{
+	n int
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.

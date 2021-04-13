@@ -1,13 +1,17 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
+	"path/filepath"
 	"log"
 	"net/rpc"
 	"os"
 	"sort"
+	"strconv"
+	"time"
 )
 
 //
@@ -18,10 +22,7 @@ type KeyValue struct {
 	Value string
 }
 
-//
-// use ihash(key) % NReduce to choose the reduce
-// task number for each KeyValue emitted by Map.
-//
+
 func ihash(key string) int {
 	h := fnv.New32a()
 	h.Write([]byte(key))
@@ -43,56 +44,43 @@ func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
-	//ask task
 	for {
+		allover:= false
 		args := ExampleArgs{}
-		//ask if done
-		over := DoneReply{}
-		over.yes = false
-		call("Master.AskTask", &args, &over)
-		if over.yes {
-			fmt.Printf("work down \n")
+		//ask if all work done
+		fmt.Printf("ask if all work done\n")
+		call("Master.IfDone", &args, &allover)
+		if allover {
+			fmt.Printf("all work done \n")
 			return
 		}
-		//not over ask task
-		reply := task{}
+		fmt.Printf("no,start to fetch a new work\n")
+		//not over, ask task
+		reply := Task{}
+		reply.target= "nowork"
+		fmt.Println(reply)
 		call("Master.AskTask", &args, &reply)
-		if reply.target != "Please wait" {
+		fmt.Println(reply)
+		//if get a task
+		if reply.target != "nowork" {
 			if reply.T == MAP {
 				file := reply.target
 				//do map
 				DoMap(file, mapf)
 			} else {
-				//innerkv := reply.target
+				num,_ := strconv.Atoi(reply.target)
 				//do reudce
+				DoReduce(num,reducef)
 			}
+		}else{		//no task
+			fmt.Printf("no work assigned,waiting...\n")
+			time.Sleep(time.Microsecond*10000)
 		}
 	}
 
 }
 
-//
-// example function to show how to make an RPC call to the master.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
 
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	call("Master.Example", &args, &reply)
-
-	// reply.Y should be 100.
-	fmt.Printf("reply.Y %v\n", reply.Y)
-}
 
 //
 // send an RPC request to the master, wait for the response.
@@ -107,8 +95,8 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 		log.Fatal("dialing:", err)
 	}
 	defer c.Close()
-
 	err = c.Call(rpcname, args, reply)
+	fmt.Printf("after a rpc call\n")
 	if err == nil {
 		return true
 	}
@@ -117,6 +105,8 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	return false
 }
 func DoMap(filename string, mapf func(string, string) []KeyValue) {
+	fmt.Printf("a new map task processing, filename:\n")
+	fmt.Println(filename)
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf("cannot open %v", filename)
@@ -130,11 +120,64 @@ func DoMap(filename string, mapf func(string, string) []KeyValue) {
 
 	//divide kva into mr-filename-(0~9)
 	sort.Sort(ByKey(kva))
-	//divide kva to temp json file
 
+	//get nreduce
+	Nargs:= ExampleArgs{}
+	nr:= NreduceReply{}
+	call("Master.GetNreduce",&Nargs,&nr)
+	//
+	//divide kva to temp json file
+		//new temp files and json encoders
+	tempfiles := make([]*os.File,nr.n)
+	encoders:= make([]*json.Encoder,nr.n)
+	for i:=0; i<nr.n; i++{
+		tempfiles[i],_= ioutil.TempFile("mr-tmp","mr-tmp-*")
+		encoders[i]= json.NewEncoder(tempfiles[i])
+	}
+		//write kva to temp files by json encoders
+	for _,kv:= range kva{
+		index:= ihash(kv.Key)%nr.n
+		err:= encoders[index].Encode(&kv)
+		if err!= nil{
+			fmt.Printf("json encode error\n")
+			panic("json encode failed")
+		}
+	}
+	fmt.Printf("gen kv to json temps \n")
+	//
 	//ask for submit
-	//call("Master.AskSubmit",)
+	args:= SubmitArgs{}
+	args.file= filename
+	reply:= DoneReply{}
+	reply.yes= false
+	call("Master.AskSubmit",&args,&reply)
+	if(reply.yes){
+		fmt.Printf("submision allowed\n")
+		//get file prefix
+		byteName:= []byte(filename)
+		mid:= byteName[3:len(byteName)-4]
+		tempFilePrefix:= "mr-"+string(mid)+"-"
+		//delete all files with the same names
+		for i,f:= range tempfiles{
+			name:= tempFilePrefix+ strconv.Itoa(i)
+			oldpath:= filepath.Join(file.Name())
+			//del name path
+			err:=os.Remove(name)
+			if err != nil{
+				panic("remove file error ")
+			}
+			os.Rename(oldpath,name)
+			f.Close()
+		}
+
+		call("master.MapSubmitted",&args,&reply)
+	}else{
+		//del all temp files
+		for _,f:=range tempfiles{
+			f.Close()
+		}
+	}
 }
-func DoReduce(file string, reducef func(string, []string) string) {
+func DoReduce(number int, reducef func(string, []string) string) {
 
 }
