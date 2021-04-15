@@ -21,19 +21,13 @@ type ExampleArgs struct {
 }
 
 type ExampleReply struct {
-	Y int
+	y int
 }
 
 // Add your RPC definitions here.
-type DoneReply struct {
-	yes bool
-}
-type SubmitArgs struct {
-	file string
-}
-type NreduceReply struct{
-	n int
-}
+
+
+
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.
@@ -44,3 +38,5 @@ func masterSock() string {
 	s += strconv.Itoa(os.Getuid())
 	return s
 }
+
+

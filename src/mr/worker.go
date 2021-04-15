@@ -45,7 +45,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	for {
-		allover:= false
+		allover:= true
 		args := ExampleArgs{}
 		//ask if all work done
 		fmt.Printf("ask if all work done\n")
@@ -56,25 +56,26 @@ func Worker(mapf func(string, string) []KeyValue,
 		}
 		fmt.Printf("no,start to fetch a new work\n")
 		//not over, ask task
+
 		reply := Task{}
-		reply.target= "nowork"
-		fmt.Println(reply)
-		call("Master.AskTask", &args, &reply)
+		reply.Target= "nowork"
+		//fmt.Println(reply)
+		call("Master.AskTask", &args,&reply)
 		fmt.Println(reply)
 		//if get a task
-		if reply.target != "nowork" {
+		if reply.Target != "nowork" {
 			if reply.T == MAP {
-				file := reply.target
+				file := reply.Target
 				//do map
 				DoMap(file, mapf)
 			} else {
-				num,_ := strconv.Atoi(reply.target)
+				num,_ := strconv.Atoi(reply.Target)
 				//do reudce
 				DoReduce(num,reducef)
 			}
 		}else{		//no task
 			fmt.Printf("no work assigned,waiting...\n")
-			time.Sleep(time.Microsecond*10000)
+			time.Sleep(time.Second*5)
 		}
 	}
 
@@ -123,54 +124,56 @@ func DoMap(filename string, mapf func(string, string) []KeyValue) {
 
 	//get nreduce
 	Nargs:= ExampleArgs{}
-	nr:= NreduceReply{}
+	nr:= 10
 	call("Master.GetNreduce",&Nargs,&nr)
 	//
 	//divide kva to temp json file
 		//new temp files and json encoders
-	tempfiles := make([]*os.File,nr.n)
-	encoders:= make([]*json.Encoder,nr.n)
-	for i:=0; i<nr.n; i++{
+	tempfiles := make([]*os.File,nr)
+	encoders:= make([]*json.Encoder,nr)
+	for i:=0; i<nr; i++{
 		tempfiles[i],_= ioutil.TempFile("mr-tmp","mr-tmp-*")
 		encoders[i]= json.NewEncoder(tempfiles[i])
 	}
 		//write kva to temp files by json encoders
 	for _,kv:= range kva{
-		index:= ihash(kv.Key)%nr.n
+		index:= ihash(kv.Key)%nr
 		err:= encoders[index].Encode(&kv)
 		if err!= nil{
 			fmt.Printf("json encode error\n")
 			panic("json encode failed")
 		}
 	}
-	fmt.Printf("gen kv to json temps \n")
+	fmt.Printf("generate kvs to json temps \n")
 	//
 	//ask for submit
-	args:= SubmitArgs{}
-	args.file= filename
-	reply:= DoneReply{}
-	reply.yes= false
-	call("Master.AskSubmit",&args,&reply)
-	if(reply.yes){
+	submitFile := filename
+	reply:= false
+	call("Master.AskSubmit",submitFile,&reply)
+	if(reply){
 		fmt.Printf("submision allowed\n")
 		//get file prefix
 		byteName:= []byte(filename)
 		mid:= byteName[3:len(byteName)-4]
 		tempFilePrefix:= "mr-"+string(mid)+"-"
+		fmt.Println(tempFilePrefix)
 		//delete all files with the same names
 		for i,f:= range tempfiles{
 			name:= tempFilePrefix+ strconv.Itoa(i)
-			oldpath:= filepath.Join(file.Name())
+			oldpath:= filepath.Join(f.Name())
+			/*
 			//del name path
 			err:=os.Remove(name)
 			if err != nil{
 				panic("remove file error ")
 			}
-			os.Rename(oldpath,name)
+			*/
+			fmt.Printf("rename %s to %s",oldpath,name)
+			//os.Rename(oldpath,name)
 			f.Close()
 		}
 
-		call("master.MapSubmitted",&args,&reply)
+		call("Master.MapSubmitted\n",submitFile,&reply)
 	}else{
 		//del all temp files
 		for _,f:=range tempfiles{

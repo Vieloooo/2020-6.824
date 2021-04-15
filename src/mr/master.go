@@ -28,10 +28,10 @@ type Master struct {
 //task state
 type Task struct {
 	T          int
-	processing bool
-	st         time.Time
-	target     string
-	td 			bool//task done
+	Processing bool
+	St         time.Time
+	Target     string
+	TaskDone 			bool//task done
 }
 
 const (
@@ -84,7 +84,7 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m.over = false
 	m.MapDone = false
 	fmt.Printf("master init\n")
-	fmt.Println(m)
+	//fmt.Println(m)
 	for _, f := range files {
 		m.fileState[f] = false
 		m.taskQueue = make([]Task, 0)
@@ -93,14 +93,15 @@ func MakeMaster(files []string, nReduce int) *Master {
 	for _, f := range files {
 		atask := Task{
 			T:          MAP,
-			processing: false,
-			target:     f,
-			st: time.Now(),
+			Processing: false,
+			Target:     f,
+			St: time.Now(),
+			TaskDone: false,
 		}
 		m.taskQueue = append(m.taskQueue, atask)
 	}
 	fmt.Printf("map task added\n")
-	fmt.Println(m.taskQueue)
+	//fmt.Println(m.taskQueue)
 	m.server()
 	return &m
 }
@@ -112,39 +113,51 @@ func (m *Master) AskTask(args *ExampleArgs, reply *Task) error {
 	//fmt.Printf("lock mutex \n")
 	defer m.mu.Unlock()
 	fmt.Println(m.taskQueue)
-	for _, t := range m.taskQueue {
-		if !t.processing {
+	for i, t := range m.taskQueue {
+		if !t.Processing {
 			reply.T = t.T
-			reply.target = t.target
+			reply.Target = t.Target
 			fmt.Println(reply)
-			t.processing = true
-			t.st = time.Now()
+			m.taskQueue[i]=Task{
+				Processing: true,
+				St: time.Now(),
+				TaskDone: false,
+				T: MAP,
+				Target: t.Target,
+			}
 
 			return nil
 		}
 
 	}
+
+
 	return nil
 }
 
 //check done
 func (m *Master) IfDone(args *ExampleArgs, reply *bool) error {
 	*reply = m.over
+
 	return nil
 }
 
 //submit a map temp file
-func (m *Master)AskSubmit(args *SubmitArgs,reply *DoneReply)error{
+func (m *Master)AskSubmit(args string,reply *bool)error{
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	reply.yes = !m.fileState[args.file]
+	*reply = !m.fileState[args]
 	return nil
 }
 // when a map task finished
-func(m *Master)MapSubmitted(args *SubmitArgs,reply *DoneReply)error{
+func(m *Master)MapSubmitted(args string,reply *bool)error{
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.fileState[args.file]=true
+	*reply= true
+
+	m.fileState[args]=true
+	//m.taskQueue[args].TaskDone= true
+	fmt.Printf("a task submitted\n")
+	m.mu.Unlock()
 	m.MapChecker()
 	return nil
 }
@@ -158,23 +171,19 @@ func (m *Master)MapChecker(){
 		}
 	}
 	m.MapDone= true
-
-	m.GenReduceTask()
-}
-func (m *Master)GenReduceTask(){
-	m.mu.Lock()
-	defer m.mu.Unlock()
+//if done add reduce task
 	for i:=0;i<m.Nreduce;i++{
 		atask:=Task{}
-		atask.processing= false
+		atask.Processing= false
 		atask.T= REDUCE
-		atask.td = false
-		atask.target = strconv.Itoa(i)
+		atask.TaskDone = false
+		atask.Target = strconv.Itoa(i)
 		m.taskQueue= append(m.taskQueue,atask)
 	}
 }
+
 //get n reudce
-func (m *Master)GetNreduce(args *ExampleArgs,reply *NreduceReply)error{
-	reply.n= m.Nreduce
+func (m *Master)GetNreduce(args *ExampleArgs,reply *int)error{
+	*reply= m.Nreduce
 	return  nil
 }
