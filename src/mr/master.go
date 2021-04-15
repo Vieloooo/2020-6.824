@@ -108,11 +108,11 @@ func MakeMaster(files []string, nReduce int) *Master {
 
 //first first unassigned task return
 func (m *Master) AskTask(args *ExampleArgs, reply *Task) error {
-	fmt.Printf("master handle ask task\n current task queue:\n")
+	fmt.Printf("master handle ask task\n")
 	m.mu.Lock()
 	//fmt.Printf("lock mutex \n")
 	defer m.mu.Unlock()
-	fmt.Println(m.taskQueue)
+	//fmt.Println(m.taskQueue)
 	for i, t := range m.taskQueue {
 		if !t.Processing {
 			reply.T = t.T
@@ -149,29 +149,23 @@ func (m *Master)AskSubmit(args string,reply *bool)error{
 	*reply = !m.fileState[args]
 	return nil
 }
+
 // when a map task finished
-func(m *Master)MapSubmitted(args string,reply *bool)error{
+func(m *Master)MapSubmit(args string,reply *bool)error{
 	m.mu.Lock()
 	*reply= true
-
 	m.fileState[args]=true
 	//m.taskQueue[args].TaskDone= true
-	fmt.Printf("a task submitted\n")
-	m.mu.Unlock()
-	m.MapChecker()
-	return nil
-}
-//check if all map task done
-func (m *Master)MapChecker(){
-	m.mu.Lock()
+	fmt.Printf("%s task submitted\n",args)
 	defer m.mu.Unlock()
 	for _,y:= range m.fileState{
 		if !y{
-			return
+			fmt.Printf("no all map done\n")
+			return nil
 		}
 	}
 	m.MapDone= true
-//if done add reduce task
+	//if done add reduce task
 	for i:=0;i<m.Nreduce;i++{
 		atask:=Task{}
 		atask.Processing= false
@@ -180,6 +174,7 @@ func (m *Master)MapChecker(){
 		atask.Target = strconv.Itoa(i)
 		m.taskQueue= append(m.taskQueue,atask)
 	}
+	return nil
 }
 
 //get n reudce

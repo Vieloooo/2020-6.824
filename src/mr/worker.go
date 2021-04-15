@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"time"
+	"regexp"
 )
 
 //
@@ -69,9 +70,9 @@ func Worker(mapf func(string, string) []KeyValue,
 				//do map
 				DoMap(file, mapf)
 			} else {
-				num,_ := strconv.Atoi(reply.Target)
+
 				//do reudce
-				DoReduce(num,reducef)
+				DoReduce(reply.Target,reducef)
 			}
 		}else{		//no task
 			fmt.Printf("no work assigned,waiting...\n")
@@ -82,12 +83,6 @@ func Worker(mapf func(string, string) []KeyValue,
 }
 
 
-
-//
-// send an RPC request to the master, wait for the response.
-// usually returns true.
-// returns false if something goes wrong.
-//
 func call(rpcname string, args interface{}, reply interface{}) bool {
 	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
 	sockname := masterSock()
@@ -161,19 +156,11 @@ func DoMap(filename string, mapf func(string, string) []KeyValue) {
 		for i,f:= range tempfiles{
 			name:= tempFilePrefix+ strconv.Itoa(i)
 			oldpath:= filepath.Join(f.Name())
-			/*
-			//del name path
-			err:=os.Remove(name)
-			if err != nil{
-				panic("remove file error ")
-			}
-			*/
-			fmt.Printf("rename %s to %s",oldpath,name)
-			//os.Rename(oldpath,name)
+			fmt.Printf("rename %s to %s\n",oldpath,name)
+			os.Rename(oldpath,name)
 			f.Close()
 		}
-
-		call("Master.MapSubmitted\n",submitFile,&reply)
+		call("Master.MapSubmit",submitFile,&reply)
 	}else{
 		//del all temp files
 		for _,f:=range tempfiles{
@@ -181,6 +168,75 @@ func DoMap(filename string, mapf func(string, string) []KeyValue) {
 		}
 	}
 }
-func DoReduce(number int, reducef func(string, []string) string) {
+func DoReduce(number string, reducef func(string, []string) string) {
+	// all files are in main/mr-prefix-0~9
+	//from mr-*-number => mr-out-number
+	//1. read files named in mr-*-$number
+	intermediate:=make([]KeyValue,0)
+	pattern:= `mr-.*-`+number
+	target:=make([]string,0)
+	root:= "./"
+	dir,err:= ioutil.ReadDir(root)
+	if err!=nil{
+		panic("open dir error")
+	}
+	for _,fi := range dir{
+		if !fi.IsDir(){
+			nm:=fi.Name()
+			//fmt.Println(nm)
+			matched,_:=regexp.MatchString(pattern,nm)
+			if matched{
+				//fmt.Println(pattern,nm)
+				target = append(target, nm)
+			}
+		}
+	}
+	//fmt.Printf("filelist:\n\n")
+	//fmt.Println(target)
+	//decode json file
+	for _,f:=range target{
+		fil,er:=os.Open(f)
+		if er!=nil{
+			panic("file open failed in reduce work")
+		}
+		dec:=json.NewDecoder(fil)
+		for {
+			var kv KeyValue
+			if erro := dec.Decode(&kv); erro != nil {
+				break
+			}
+			intermediate = append(intermediate, kv)
+		}
+		fil.Close()
+	}
+	//all kvs are transfered from json files to intermediate
+	sort.Sort(ByKey(intermediate))
+	ofile,err:= ioutil.TempFile("mr-tmp","mr-*")
+	if err!=nil{
+		panic("create temp files failed in reduce work")
+	}
+	//copy from mrseq
+	i := 0
+	for i < len(intermediate) {
+		j := i + 1
+		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, intermediate[k].Value)
+		}
+		output := reducef(intermediate[i].Key, values)
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+		i = j
+	}
+	// ask for submit
+
+	//allowed, change name
+	outputName:="mr-out-"+number
+	os.Rename(filepath.Join(ofile.Name()),outputName)
+	ofile.Close()
+	// submit
 
 }
