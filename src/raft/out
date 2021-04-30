@@ -1,0 +1,59 @@
+2021/04/26 09:28:32 election loop start
+2021/04/26 09:28:32 election timeout, new election
+2021/04/26 09:28:32 follower to candidate
+2021/04/26 09:28:32 election timeout, new election
+2021/04/26 09:28:32 new election, refresh timeout and term ++
+2021/04/26 09:28:32 my vote args is {1 0 -1 0}
+2021/04/26 09:28:32 i am candidate, start ask for vote 
+2021/04/26 09:28:32 ask id: 2 for vote
+2021/04/26 09:28:32 ask id: 1 for vote
+2021/04/26 09:28:32 vote rpc error
+2021/04/26 09:28:32 get a vote reply &{-1 false}
+2021/04/26 09:28:33 vote rpc error
+2021/04/26 09:28:33 get a vote reply &{-1 false}
+2021/04/26 09:28:33 vote done, get 1 out of 3 
+2021/04/26 09:28:33 im still candidtate
+2021/04/26 09:28:33 election timeout, new election
+2021/04/26 09:28:33 new election, refresh timeout and term ++
+2021/04/26 09:28:33 my vote args is {2 0 -1 0}
+2021/04/26 09:28:33 i am candidate, start ask for vote 
+2021/04/26 09:28:33 ask id: 2 for vote
+2021/04/26 09:28:33 ask id: 1 for vote
+2021/04/26 09:28:39 vote rpc error
+2021/04/26 09:28:39 get a vote reply &{-1 false}
+2021/04/26 09:28:39 vote rpc error
+2021/04/26 09:28:39 get a vote reply &{-1 false}
+2021/04/26 09:28:39 vote done, get 1 out of 3 
+2021/04/26 09:28:39 im still candidtate
+2021/04/26 09:28:39 election timeout, new election
+2021/04/26 09:28:39 new election, refresh timeout and term ++
+2021/04/26 09:28:39 my vote args is {3 0 -1 0}
+2021/04/26 09:28:39 i am candidate, start ask for vote 
+2021/04/26 09:28:39 ask id: 2 for vote
+2021/04/26 09:28:39 ask id: 1 for vote
+2021/04/26 09:28:42 vote rpc error
+2021/04/26 09:28:42 get a vote reply &{-1 false}
+2021/04/26 09:28:44 vote rpc error
+2021/04/26 09:28:44 get a vote reply &{-1 false}
+2021/04/26 09:28:44 vote done, get 1 out of 3 
+2021/04/26 09:28:44 im still candidtate
+2021/04/26 09:28:44 election timeout, new election
+2021/04/26 09:28:44 new election, refresh timeout and term ++
+2021/04/26 09:28:44 my vote args is {4 0 -1 0}
+2021/04/26 09:28:44 i am candidate, start ask for vote 
+2021/04/26 09:28:44 ask id: 2 for vote
+2021/04/26 09:28:44 ask id: 1 for vote
+2021/04/26 09:28:50 vote rpc error
+2021/04/26 09:28:50 get a vote reply &{-1 false}
+2021/04/26 09:28:51 vote rpc error
+2021/04/26 09:28:51 get a vote reply &{-1 false}
+2021/04/26 09:28:51 vote done, get 1 out of 3 
+2021/04/26 09:28:51 im still candidtate
+2021/04/26 09:28:51 election timeout, new election
+2021/04/26 09:28:51 new election, refresh timeout and term ++
+2021/04/26 09:28:51 my vote args is {5 0 -1 0}
+2021/04/26 09:28:51 i am candidate, start ask for vote 
+2021/04/26 09:28:51 ask id: 2 for vote
+2021/04/26 09:28:51 ask id: 1 for vote
+signal: interrupt
+FAIL	_/home/vielo/code/Go-Cold/6.824/src/raft	19.831s
