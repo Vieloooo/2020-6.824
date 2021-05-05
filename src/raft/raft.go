@@ -82,7 +82,9 @@ func (rf *Raft) GetState() (int, bool) {
 	var isleader bool
 	// Your code here (2A).
 	term = rf.currentTerm
-	isleader = rf.role == Leader
+	if rf.role==Leader{
+		isleader= true
+	}
 	return term, isleader
 }
 
@@ -316,14 +318,15 @@ func (rf *Raft) electionloop() {
 		rf.eleMu.Unlock()
 		//timeout
 		if timeLimit < timePast {
-			DPrintf("timeout %v,me: %d,term: %d", timeLimit, rf.me, rf.currentTerm)
+			//DPrintf("timeout %v,me: %d,term: %d", timeLimit, rf.me, rf.currentTerm)
 			rf.mu.Lock()
 			switch rf.role {
 			case Follower:
+				DPrintf("F to C, %d", rf.me)
 				rf.role = Candidate
 				rf.voteFor = rf.me
 				rf.mu.Unlock()
-				DPrintf("F to C, %d", rf.me)
+
 			case Candidate:
 				// restart election
 				rf.eleMu.Lock()
@@ -384,15 +387,17 @@ func (rf *Raft) electionloop() {
 				// check role
 				if rf.role == Candidate {
 					if newTerm > rf.currentTerm {
+						DPrintf("C to F, %d\n", rf.me)
 						rf.role = Follower
 						rf.voteFor = -1
 						rf.currentTerm = newTerm
-						DPrintf("C to F, %d\n", rf.me)
+
 					} else {
 						if voteMe > len(rf.peers)/2 {
+							DPrintf("C to L, term: %d,%d\n", rf.currentTerm,rf.me)
 							rf.role = Leader
 							rf.loopStartTime = time.Now()
-							DPrintf("C to L, %d\n", rf.me)
+
 						} else {
 
 						}
@@ -400,21 +405,23 @@ func (rf *Raft) electionloop() {
 				}
 				rf.mu.Unlock()
 			case Leader:
+				//DPrintf("%d still leader",rf.me)
 				rf.mu.Unlock()
+				//time.Sleep(10 *time.Millisecond)
 			}
 		}
 	}
+	time.Sleep(1000*time.Millisecond)
 }
 func (rf *Raft) leaderBeat() {
 	for !rf.killed() {
-		time.Sleep(time.Millisecond * 10)
-
-		//rf.mu.Lock()
+		time.Sleep(time.Millisecond * 100)
+		rf.mu.Lock()
 		if rf.role != Leader {
-			//rf.mu.Unlock()
-			return
+			rf.mu.Unlock()
+			continue
 		}
-		DPrintf("******\n*****\n%d is L,start beat", rf.me)
+		LPrintf("*****\n %d is L,start beat,role:%d,term: %d", rf.me,rf.role,rf.currentTerm)
 		rf.mu.Unlock()
 
 		for i := range rf.peers {
@@ -424,6 +431,7 @@ func (rf *Raft) leaderBeat() {
 			rf.broadcast(i)
 		}
 	}
+	time.Sleep(1000*time.Millisecond)
 }
 
 func (rf *Raft) broadcast(id int) {
@@ -432,21 +440,24 @@ func (rf *Raft) broadcast(id int) {
 	args.Term = rf.currentTerm
 	args.LeaderId = rf.me
 	rf.mu.Unlock()
-	DPrintf("%d lord %d, term:%d", rf.me, id, args.Term)
+	LPrintf("%d lord %d, term:%d", rf.me, id, args.Term)
 	go func() {
 		reply := AppendEntriesReply{}
-
+		reply.Success= false
 		ok := rf.sendAppendEntries(id, &args, &reply)
 		if ok {
 			if !reply.Success {
 				rf.mu.Lock()
 				if rf.currentTerm < reply.Term {
-					DPrintf("L to F, %d", rf.me)
+					LPrintf("L to F, %d", rf.me)
 					rf.currentTerm = reply.Term
 					rf.role = Follower
 					rf.voteFor = -1
 				}
 			}
+		}else{
+			LPrintf("%d can't lord %d,net err",rf.me,id)
 		}
 	}()
+		//time.Sleep(100*time.Millisecond)
 }
