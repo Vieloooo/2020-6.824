@@ -24,7 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
+	//"fmt"
 	"../labrpc"
 )
 
@@ -158,15 +158,20 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
 	reply.Success = false
+
 	if rf.currentTerm > args.Term {
+		DPrintf("args term too old,%d %d %d %d",args.LeaderId,args.Term,rf.me,rf.currentTerm)
+
 		return
 	}
 	rf.eleMu.Lock()
 	rf.loopStartTime = time.Now()
 	rf.eleMu.Unlock()
 	reply.Success = true
+	DPrintf("%d update term from %d to %d in append",rf.me,rf.currentTerm,args.Term)
 	rf.currentTerm = args.Term
 	rf.voteFor = args.LeaderId
+	DPrintf("get append entry, %d to F iam %d,term:%d",rf.role,rf.me,rf.currentTerm)
 	rf.role = Follower
 
 }
@@ -181,7 +186,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 	if args.Term > rf.currentTerm {
-		DPrintf("x to F %d", rf.me)
+		DPrintf("%d to F %d,term:form %d to %d", rf.role,rf.me,rf.currentTerm,args.Term)
 		rf.currentTerm = args.Term
 		rf.role = Follower
 		rf.voteFor = -1
@@ -189,7 +194,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if rf.voteFor == -1 || rf.voteFor == args.CandidateId {
 		rf.voteFor = args.CandidateId
 		reply.VoteGranted = true
-		rf.loopStartTime = time.Now() // 为其他人投票，那么重置自己的下次投票时间
+		rf.loopStartTime = time.Now() // vote for others, reset loop time
 	}
 }
 
@@ -268,6 +273,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 //
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
+	DPrintf("%d was killed",rf.me)
 	// Your code here, if desired.
 }
 
@@ -322,7 +328,7 @@ func (rf *Raft) electionloop() {
 			rf.mu.Lock()
 			switch rf.role {
 			case Follower:
-				DPrintf("F to C, %d", rf.me)
+				DPrintf("www, leader gone, F to C, %d", rf.me)
 				rf.role = Candidate
 				rf.voteFor = rf.me
 				rf.mu.Unlock()
@@ -343,6 +349,7 @@ func (rf *Raft) electionloop() {
 				//unlock to send vote rpc
 				rf.mu.Unlock()
 				voteReply := make(chan *RequestVoteReply, len(rf.peers))
+				DPrintf("im %d, term %d, ask for vote ",rf.me,rf.currentTerm)
 				for id := 0; id < len(rf.peers); id++ {
 					go func(id int) {
 						if id == rf.me {
@@ -352,7 +359,7 @@ func (rf *Raft) electionloop() {
 						if ok := rf.sendRequestVote(id, &args, &reply); ok {
 							voteReply <- &reply
 						} else {
-							DPrintf("internet error when %d call %d", rf.me, id)
+							DPrintf("internet error when %d call %d to vote ", rf.me, id)
 							voteReply <- &RequestVoteReply{Term: -1, VoteGranted: false}
 						}
 
@@ -390,11 +397,13 @@ func (rf *Raft) electionloop() {
 						DPrintf("C to F, %d\n", rf.me)
 						rf.role = Follower
 						rf.voteFor = -1
+						DPrintf("%d update term from %d to %d in vote analysis",rf.me,rf.currentTerm,newTerm)
 						rf.currentTerm = newTerm
 
 					} else {
 						if voteMe > len(rf.peers)/2 {
 							DPrintf("C to L, term: %d,%d\n", rf.currentTerm,rf.me)
+							time.Sleep(1*time.Microsecond)
 							rf.role = Leader
 							rf.loopStartTime = time.Now()
 
@@ -411,7 +420,7 @@ func (rf *Raft) electionloop() {
 			}
 		}
 	}
-	time.Sleep(1000*time.Millisecond)
+	DPrintf("%d 's election loop over", rf.me)
 }
 func (rf *Raft) leaderBeat() {
 	for !rf.killed() {
@@ -420,6 +429,10 @@ func (rf *Raft) leaderBeat() {
 		if rf.role != Leader {
 			rf.mu.Unlock()
 			continue
+		}
+		if rf.killed(){
+			DPrintf("%d 's leader beat loop over", rf.me)
+			return
 		}
 		LPrintf("*****\n %d is L,start beat,role:%d,term: %d", rf.me,rf.role,rf.currentTerm)
 		rf.mu.Unlock()
@@ -431,7 +444,7 @@ func (rf *Raft) leaderBeat() {
 			rf.broadcast(i)
 		}
 	}
-	time.Sleep(1000*time.Millisecond)
+	DPrintf("%d 's leader beat loop over", rf.me)
 }
 
 func (rf *Raft) broadcast(id int) {
@@ -448,12 +461,16 @@ func (rf *Raft) broadcast(id int) {
 		if ok {
 			if !reply.Success {
 				rf.mu.Lock()
-				if rf.currentTerm < reply.Term {
+				if rf.currentTerm < reply.Term && rf.role==Leader{
 					LPrintf("L to F, %d", rf.me)
+					DPrintf("%d update term from %d to %d in leader boardcast",rf.me,rf.currentTerm,reply.Term)
 					rf.currentTerm = reply.Term
 					rf.role = Follower
 					rf.voteFor = -1
 				}
+				rf.mu.Unlock()
+			}else {
+				DPrintf("%d have lord %d in Term %d",rf.me,id,args.Term)
 			}
 		}else{
 			LPrintf("%d can't lord %d,net err",rf.me,id)
